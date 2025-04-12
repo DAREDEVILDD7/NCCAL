@@ -1,0 +1,107 @@
+I have a project assigned to me by national council for culture arts and literature (NCCAL)
+
+They have two type of services:
+
+1. Preventive Maintenance
+2. Service Maintenance
+
+When an Inspector (Technician/Engineer/Someone) goes to a Customer, they can update a job card via a tablet assigned to them
+Each time they visit a customer a new job card is to be created with the following details:
+
+1. Unique Job Card number (preferably 9 digits) which increments each time anew job card is created
+2.Date In indicating the time they reached to the customer's site
+3. Customer Name (which customer the inspector visited)
+4. Date Out indicating what time they finished work at the site
+5. Total Hours indicating the total time they took (Date Out - Date In)
+6. Type (Preventive Maintenance/Service Maintenance)
+7. Inspector (The name of the Engineer who visited)
+8. Remarks (optional)
+
+9. THIS IS THE MOST IMPORTANT:
+ CHECKLIST (It is a table having a list of tasks to be done whenever an inspector goes for a site visit)
+
+The table has three columns: Question, Answer, Remarks
+
+Under Questions column, it shows a list of tasks for which the corresponding answers have to filled by the inspector before ending the site visit.
+
+For Preventive Maintenance the Questions are (bracket contains what answer field is shown on the inspector tab):
+Platform (Text)
+S/W RIS (Text)
+System Condition (Yes/No)
+Hardware Condition (Yes/No)
+Faulty (Yes/No)
+Dust Clean (Yes/No)
+System Cabling/MDF (Yes/No)
+PEBX C.O. Lines (Yes/No)
+Back-Up (Yes/No)
+Cabinet (Yes/No)
+UPS Batteries (Yes/No)
+Power Supply (Yes/No)
+Room Temp. (Yes/No)
+SIP Trunks connection to other system (Yes/No)
+System Image/Photo (Image upload)
+Notes (Text for Remarks, multiple lines, paragraphs)
+E1 (Yes/No)
+
+
+
+For Service Maintenance the Questions are (bracket contains what answer field is shown on the inspector tab):
+
+Platform/Equipment Type (Text)
+Telephone Number (Field to type in Number)
+Nature of Fault/Installation (Text multiple lines, remarks)
+Action Taken (Text multiple lines, remarks)
+
+
+*The (Yes/No) Questions have to be shown as a checkbox or something
+
+10. Signatures: The inspector and the customer have to sign digitally
+
+Then the engineer clicks submit and The Date Out Time is recorded (Submission only after both inspector and Customer has signed)
+______________________________________________________________________
+
+
+
+Customer sign add name of the employee from the customer who is signing (Customer is usually a company so at the end a field is there before digital signature to enter the name of customer employee, the inspector name can be automatically taken during login)
+
+
+
+They need a software for the engineer interface
+
+This should generate a pdf with a predefined template including the checklists and digital signatures in the admin end like a job card
+
+Also, I need to create an admin panel where they can see all data including the last site visit, search tasks
+
+_______________________________________________________________________
+
+The application:
+
+
+I prefer to create a next js application for this
+
+
+We need an engineer interface and an admin interface
+Both has login with ID and password
+
+In the Engineer Interface, initially the engineer can login
+then their name is shown (a welcome message)
+Then the job card number (increment from last job card number) is displayed on top left
+Then Date In field they can set the date and time, also give a button (Set To Now) to automatically set timestamp as that time when they click it.
+All time is Kuwait Time
+Then all the text fields one below the other
+Date Out and Total Hours should be set at last I think I am not sure
+Then a dropdown to select type
+Inspector name (By default show the name of engineer who has logged in, they can change if needed) 
+Then the tasks yes/no should be a toggle or something 
+
+If they select Type as Service Maintenance, just show the fields for service maintenance
+
+Also, if the admin wants to add more task fields for a particular type, that option is also needed
+
+
+
+
+
+
+First just tell me the tables that i have to create in the database, the fields and the type
+The entire schema in supabase

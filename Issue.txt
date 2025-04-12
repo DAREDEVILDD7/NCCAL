@@ -1,0 +1,186 @@
+need a single database structure that can handle both Preventive Maintenance and Service Maintenance services within the same table while accommodating different checklist questions for each type. The questions and answers must be stored efficiently in a way that allows both types of services to have their specific sets of questions but still use a shared structure for ease of querying and reporting.
+
+Key Requirements Recap:
+Job Card Creation:
+
+Each job card has details like job card number, inspector, customer name, date in/out, total hours, and remarks.
+
+Each job card will also have specific maintenance details (Preventive or Service Maintenance).
+
+Checklist Questions:
+
+Preventive Maintenance has a fixed set of checklist questions.
+
+Service Maintenance has a different set of questions.
+
+Both sets should be dynamically handled in a way that each maintenance type can have its own set of relevant questions.
+
+Dynamic Question-Answer Structure:
+
+The questions and answers for the checklist should be stored in a flexible way where both types of maintenance can have their questions without redundancy.
+
+The answers for each question can be varied (e.g., text input, Yes/No, images).
+
+Solution Recap:
+A Job Cards table to store the basic details about the job card (customer, inspector, date, etc.).
+
+A Checklist Answers table to store each checklist question's response, including the question, answer, remarks, and any uploaded images. The same table will handle questions for both Preventive and Service Maintenance types.
+
+Key Table Structure:
+Job Cards Table (job_cards): Stores general job card data.
+
+Checklist Answers Table (checklist_answers): Stores the dynamic answers for all checklist questions, linking each answer to the corresponding job card.
+
+This allows flexibility for different maintenance types with their specific sets of questions while still using a single table to store answers.
+
+Is that aligned with your understanding of the solution? Would you like me to refine or elaborate further on any part of the database structure or the workflow?
+
+1. Database Tables
+We will create two main tables:
+
+job_cards: Stores job card-related information.
+
+checklist_answers: Stores answers for the checklist questions based on the job card.
+
+Table 1: job_cards
+This table will hold all the details related to each job card, including the customer, inspector, date in/out, and the type of maintenance (Preventive or Service).
+
+sql
+Copy
+Edit
+CREATE TABLE job_cards (
+    id SERIAL PRIMARY KEY,
+    job_card_number INT UNIQUE NOT NULL,  -- Unique job card number
+    date_in TIMESTAMP NOT NULL,           -- Date In (Inspector's arrival time)
+    date_out TIMESTAMP NOT NULL,          -- Date Out (Inspector's departure time)
+    total_hours INTERVAL,                 -- Calculated total hours (Date Out - Date In)
+    type VARCHAR(50),                     -- Type of Maintenance ('Preventive Maintenance' or 'Service Maintenance')
+    inspector_id INT REFERENCES users(id), -- Inspector who is performing the job
+    customer_name VARCHAR(255),           -- Customer (Company or client)
+    remarks TEXT,                         -- Optional remarks by the inspector
+    customer_signature_url TEXT,         -- URL to the customer's signature
+    inspector_signature_url TEXT,        -- URL to the inspector's signature
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp when the job card was created
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the job card was last updated
+);
+Table 2: checklist_answers
+This table stores answers for all the checklist questions, whether it's for Preventive Maintenance or Service Maintenance. Each job card can have multiple checklist answers, so we will link the answers to the job card using the job_card_id.
+
+sql
+Copy
+Edit
+CREATE TABLE checklist_answers (
+    id SERIAL PRIMARY KEY,
+    job_card_id INT REFERENCES job_cards(id) ON DELETE CASCADE,  -- Foreign Key linking to job_cards table
+    question VARCHAR(255),             -- Checklist question (e.g., "Platform", "S/W RIS", etc.)
+    answer VARCHAR(255),               -- Answer for the question (Yes/No, text, image URL, etc.)
+    remarks TEXT,                      -- Remarks (optional additional comments)
+    image_url TEXT,                    -- URL for any uploaded image (e.g., system image)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp when the answer was recorded
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- Timestamp when the answer was last updated
+);
+2. Example Data Insertion
+Example 1: Preventive Maintenance Job Card
+Job Card Table Entry:
+
+sql
+Copy
+Edit
+INSERT INTO job_cards (job_card_number, date_in, date_out, total_hours, type, inspector_id, customer_name, remarks)
+VALUES 
+(123456789, '2025-04-10 08:00:00', '2025-04-10 12:00:00', '4 hours', 'Preventive Maintenance', 1, 'Oracle', 'System check complete.');
+Checklist Answers for Preventive Maintenance:
+
+sql
+Copy
+Edit
+INSERT INTO checklist_answers (job_card_id, question, answer, remarks, image_url)
+VALUES
+(1, 'Platform', 'check', NULL, NULL),
+(1, 'S/W RIS', 'chefkc2', NULL, NULL),
+(1, 'System Condition', 'No', NULL, NULL),
+(1, 'Hardware Condition', 'No', NULL, NULL),
+(1, 'Faulty', 'No', NULL, NULL),
+(1, 'Dust Clean', 'No', NULL, NULL),
+(1, 'System Cabling/MDF', 'No', NULL, NULL),
+(1, 'PEBX C.O. Lines', 'No', NULL, NULL),
+(1, 'Back-Up', 'No', NULL, NULL),
+(1, 'Cabinet', 'No', NULL, NULL),
+(1, 'UPS Batteries', 'No', NULL, NULL),
+(1, 'Power Supply', 'No', NULL, NULL),
+(1, 'Room Temp.', 'No', NULL, NULL),
+(1, 'SIP Trunk Connection to other system', 'No', NULL, NULL),
+(1, 'System Image/Photo', NULL, 'LOGO.jpg', 'path_to_image'),
+(1, 'Notes', 'System check complete. No issues found.', NULL, NULL),
+(1, 'E1', 'No', NULL, NULL);
+Example 2: Service Maintenance Job Card
+Job Card Table Entry:
+
+sql
+Copy
+Edit
+INSERT INTO job_cards (job_card_number, date_in, date_out, total_hours, type, inspector_id, customer_name, remarks)
+VALUES 
+(123456790, '2025-04-10 09:00:00', '2025-04-10 11:00:00', '2 hours', 'Service Maintenance', 2, 'Oracle', 'Fault resolved.');
+Checklist Answers for Service Maintenance:
+
+sql
+Copy
+Edit
+INSERT INTO checklist_answers (job_card_id, question, answer, remarks, image_url)
+VALUES
+(2, 'Platform/Equipment Type', 'qwert', NULL, NULL),
+(2, 'Telephone Number', '9191929283836', NULL, NULL),
+(2, 'Nature of Fault/Installation', 'System was not starting', 'Resolved by replacing faulty part', NULL),
+(2, 'Action Taken', 'Replaced power supply unit', 'System powered back on', NULL);
+3. Query to Fetch Job Card and Checklist Answers
+To fetch a job card and its associated checklist answers, you can use a simple SQL query:
+
+sql
+Copy
+Edit
+SELECT 
+    job_cards.job_card_number,
+    job_cards.date_in,
+    job_cards.date_out,
+    job_cards.total_hours,
+    job_cards.type,
+    job_cards.customer_name,
+    job_cards.remarks,
+    job_cards.customer_signature_url,
+    job_cards.inspector_signature_url,
+    checklist_answers.question,
+    checklist_answers.answer,
+    checklist_answers.remarks AS answer_remarks,
+    checklist_answers.image_url
+FROM 
+    job_cards
+JOIN 
+    checklist_answers ON job_cards.id = checklist_answers.job_card_id
+WHERE 
+    job_cards.job_card_number = 123456789;
+4. Admin and Inspector Workflow
+Admin Panel:
+
+Admin can view the list of all job cards with details such as job card number, customer name, inspector, date in/out, and total hours.
+
+Admin can view the checklist answers, including the answers for each question and any uploaded images.
+
+Admin can search, filter, and generate reports on job cards.
+
+Inspector Interface:
+
+Inspector logs in, views their job card number, and inputs their answers to the checklist questions.
+
+Inspector selects the type of maintenance (Preventive or Service).
+
+Inspector can add digital signatures (both customer and inspector) and submit the form once both signatures are provided.
+
+The system automatically calculates the total hours based on Date In and Date Out.
+
+5. Notes on Flexibility
+Adding New Questions: The checklist_answers table is flexible, allowing you to add new questions over time without changing the schema.
+
+Image Uploads: The image_url column supports image uploads for questions like "System Image/Photo". You can store images in a cloud storage and store the URL in the database.
+
+This solution efficiently handles both types of maintenance, provides flexibility for adding new questions, and ensures that job cards and answers are neatly organized for querying and reporting.
