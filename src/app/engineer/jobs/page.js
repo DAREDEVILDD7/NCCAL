@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import SignatureCanvas from "react-signature-canvas";
 import Switch from "react-switch";
+import { generateMaintenancePDF } from "../../../utils/pdfGenerator";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -39,6 +40,7 @@ export default function EngineerJobs() {
   const customerSignatureRef = useRef(null);
   const remarkTextareaRef = useRef(null);
   const customerTextareaRef = useRef(null);
+  const fileInputRefs = useRef({});
 
   useEffect(() => {
     const stored = localStorage.getItem("engineer");
@@ -119,6 +121,40 @@ export default function EngineerJobs() {
     }));
   };
 
+  // First, define this handler function in your component
+  const handleMaintenanceTypeChange = (e) => {
+    const newType = e.target.value;
+    setMaintenanceType(newType);
+    setImagePreview(null);
+    setIsSignatureVisible(false); // Hide signatures initially
+
+    // Clear any signatures
+    if (inspectorSignatureRef.current) {
+      inspectorSignatureRef.current.clear();
+    }
+    if (customerSignatureRef.current) {
+      customerSignatureRef.current.clear();
+    }
+
+    // IMPORTANT: Also reset the signature states
+    setInspectorSignature(null);
+    setCustomerSignature(null);
+  };
+
+  // Then use the handler in your select element
+  <select
+    id="maintenanceType"
+    value={maintenanceType}
+    onChange={handleMaintenanceTypeChange}
+    className="w-full md:w-1/2 px-4 py-2 border rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+  >
+    <option value="" disabled>
+      Select maintenance type
+    </option>
+    <option value="Preventive Maintenance">Preventive Maintenance</option>
+    <option value="NCCAL Service Maintenance">NCCAL Service Maintenance</option>
+  </select>;
+
   // Function to get current answers for the selected maintenance type
   const getCurrentAnswers = () => {
     return allAnswers[maintenanceType] || {};
@@ -173,6 +209,30 @@ export default function EngineerJobs() {
         setImagePreview(imageData);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleImageDelete = (index) => {
+    // Remove the image from answers
+    setAllAnswers((prevAllAnswers) => {
+      const updatedAnswers = { ...prevAllAnswers };
+      if (updatedAnswers[maintenanceType]) {
+        delete updatedAnswers[maintenanceType][`image_${index}`];
+
+        // Also update the answer value
+        updatedAnswers[maintenanceType][index] = "No";
+      }
+      return updatedAnswers;
+    });
+
+    // Reset image preview if needed
+    if (allAnswers[maintenanceType]?.[`image_${index}`] === imagePreview) {
+      setImagePreview(null);
+    }
+
+    // Reset the file input value
+    if (fileInputRefs.current[`file_${index}`]) {
+      fileInputRefs.current[`file_${index}`].value = "";
     }
   };
 
@@ -278,7 +338,7 @@ export default function EngineerJobs() {
         throw new Error("Customer signature is required");
       }
 
-      // Create the job card record
+      // Create the job card record - Note: we removed inspector_name field
       const { data: jobCard, error: jobCardError } = await supabase
         .from("job_cards")
         .insert({
@@ -292,6 +352,7 @@ export default function EngineerJobs() {
           customer_signature: customerSig,
           inspector_signature: inspectorSig,
           type: maintenanceType,
+          // inspector_name field removed as it doesn't exist in the database
         })
         .select("id");
 
@@ -309,26 +370,33 @@ export default function EngineerJobs() {
           // Special handling for image-type questions
           if (question.input_type === "image") {
             const imageData = allAnswers[maintenanceType]?.[`image_${index}`];
-            const hasImage = !!imageData;
 
             answersToInsert.push({
               job_card_id: jobCardId,
-              answer: hasImage ? imageData : "No",
+              answer: imageData || "No", // Store "No" if no image, otherwise store image data
               template_id: question.id,
             });
           }
-          // For all other questions
-          else if (
-            question.input_type === "yesno" ||
-            (currentAnswers[index] &&
-              currentAnswers[index].toString().trim() !== "")
-          ) {
+          // For yes/no questions
+          else if (question.input_type === "yesno") {
             answersToInsert.push({
               job_card_id: jobCardId,
-              answer:
-                question.input_type === "yesno"
-                  ? currentAnswers[index] || "No"
-                  : currentAnswers[index],
+              answer: currentAnswers[index] || "No", // Default to "No" if not answered
+              template_id: question.id,
+            });
+          }
+          // For all other questions (text, number)
+          else if (currentAnswers[index]?.toString().trim() !== "") {
+            answersToInsert.push({
+              job_card_id: jobCardId,
+              answer: currentAnswers[index],
+              template_id: question.id,
+            });
+          } else {
+            // Include empty answers too for completeness
+            answersToInsert.push({
+              job_card_id: jobCardId,
+              answer: "",
               template_id: question.id,
             });
           }
@@ -343,10 +411,20 @@ export default function EngineerJobs() {
           if (answersError) throw answersError;
         }
 
-        // Success - redirect or show confirmation
-        alert("Maintenance job card submitted successfully!");
+        // Generate PDF after successful submission
+        try {
+          const pdfFileName = await generateMaintenancePDF(jobCardId);
+          alert(
+            `Maintenance job card submitted successfully! PDF generated: ${pdfFileName}`
+          );
+        } catch (pdfError) {
+          console.error("Error generating PDF:", pdfError);
+          alert(
+            "Job card saved but PDF generation failed. Please try downloading it later."
+          );
+        }
 
-        // Optional: Clear form or redirect
+        // Reset form
         setMaintenanceType("");
         setQuestions([]);
         setAllAnswers({});
@@ -626,19 +704,44 @@ export default function EngineerJobs() {
                             <input
                               type="file"
                               accept="image/*"
+                              ref={(el) =>
+                                (fileInputRefs.current[`file_${index}`] = el)
+                              }
                               onChange={(e) => handleImageUpload(e, index)}
                               className="w-full px-4 py-2 border rounded-lg text-gray-700"
                             />
                             {allAnswers[maintenanceType]?.[
                               `image_${index}`
                             ] && (
-                              <img
-                                src={
-                                  allAnswers[maintenanceType][`image_${index}`]
-                                }
-                                alt="Preview"
-                                className="mt-2 w-full max-w-xs rounded-lg"
-                              />
+                              <div className="relative">
+                                <img
+                                  src={
+                                    allAnswers[maintenanceType][
+                                      `image_${index}`
+                                    ]
+                                  }
+                                  alt="Preview"
+                                  className="mt-2 w-full max-w-xs rounded-lg"
+                                />
+                                <button
+                                  onClick={() => handleImageDelete(index)}
+                                  className="absolute top-4 right-2 bg-red-500 text-white p-1 rounded-full"
+                                  title="Delete image"
+                                >
+                                  <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    className="h-5 w-5"
+                                    viewBox="0 0 20 20"
+                                    fill="currentColor"
+                                  >
+                                    <path
+                                      fillRule="evenodd"
+                                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                      clipRule="evenodd"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
                             )}
                           </div>
                         )}
@@ -660,15 +763,22 @@ export default function EngineerJobs() {
               {/* Inspector Signature */}
               <div className="space-y-2">
                 <label className="text-gray-700">Inspector Signature</label>
-                <SignatureCanvas
-                  penColor="black"
-                  canvasProps={{
-                    width: 500,
-                    height: 200,
-                    className: "border rounded-lg",
-                  }}
-                  ref={inspectorSignatureRef}
-                />
+                <div
+                  className="w-full border rounded-lg"
+                  style={{ maxWidth: "100%" }}
+                >
+                  <SignatureCanvas
+                    penColor="black"
+                    canvasProps={{
+                      className: "signature-canvas",
+                      style: {
+                        width: "100%",
+                        height: "200px",
+                      },
+                    }}
+                    ref={inspectorSignatureRef}
+                  />
+                </div>
                 <div className="flex space-x-4">
                   <button
                     onClick={() => clearSignature("inspector")}
@@ -682,15 +792,22 @@ export default function EngineerJobs() {
               {/* Customer Signature */}
               <div className="space-y-2">
                 <label className="text-gray-700">Customer Signature</label>
-                <SignatureCanvas
-                  penColor="black"
-                  canvasProps={{
-                    width: 500,
-                    height: 200,
-                    className: "border rounded-lg",
-                  }}
-                  ref={customerSignatureRef}
-                />
+                <div
+                  className="w-full border rounded-lg"
+                  style={{ maxWidth: "100%" }}
+                >
+                  <SignatureCanvas
+                    penColor="black"
+                    canvasProps={{
+                      className: "signature-canvas",
+                      style: {
+                        width: "100%",
+                        height: "200px",
+                      },
+                    }}
+                    ref={customerSignatureRef}
+                  />
+                </div>
                 <div className="flex space-x-4">
                   <button
                     onClick={() => clearSignature("customer")}
