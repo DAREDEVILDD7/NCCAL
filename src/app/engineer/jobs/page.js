@@ -338,7 +338,7 @@ export default function EngineerJobs() {
         throw new Error("Customer signature is required");
       }
 
-      // Create the job card record - Note: we removed inspector_name field
+      // Create the job card record
       const { data: jobCard, error: jobCardError } = await supabase
         .from("job_cards")
         .insert({
@@ -352,7 +352,6 @@ export default function EngineerJobs() {
           customer_signature: customerSig,
           inspector_signature: inspectorSig,
           type: maintenanceType,
-          // inspector_name field removed as it doesn't exist in the database
         })
         .select("id");
 
@@ -411,12 +410,17 @@ export default function EngineerJobs() {
           if (answersError) throw answersError;
         }
 
-        // Generate PDF after successful submission
+        // Generate PDF using our new generator
         try {
           const pdfFileName = await generateMaintenancePDF(jobCardId);
-          alert(
-            `Maintenance job card submitted successfully! PDF generated: ${pdfFileName}`
-          );
+
+          // Create a success message with download option
+          const message = `Maintenance job card submitted successfully! PDF generated: ${pdfFileName}`;
+
+          // You can implement a download function here if needed
+          // For example, you could generate a download link for the PDF
+
+          alert(message);
         } catch (pdfError) {
           console.error("Error generating PDF:", pdfError);
           alert(

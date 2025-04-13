@@ -1,302 +1,183 @@
-// src/utils/pdfGenerator.js
-import jsPDF from "./pdfSetup";
+// PDF Generator for Maintenance Reports
+import jsPDF from 'jspdf';
+import { supabase } from '../lib/supabaseClient';
 
-import { supabase } from "../lib/supabaseClient";
 
-// Function to convert seconds to HH:MM:SS format
-const secondsToHHMMSS = (seconds) => {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${hours.toString().padStart(2, "0")}:${minutes
-    .toString()
-    .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-};
-
-// Function to format date from ISO to DD/MM/YYYY HH:MM:SS
-const formatDate = (isoDate) => {
-  if (!isoDate) return "";
-  const date = new Date(isoDate);
-  const day = date.getDate().toString().padStart(2, "0");
-  const month = (date.getMonth() + 1).toString().padStart(2, "0");
-  const year = date.getFullYear();
-  const hours = date.getHours().toString().padStart(2, "0");
-  const minutes = date.getMinutes().toString().padStart(2, "0");
-  const seconds = date.getSeconds().toString().padStart(2, "0");
-
-  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-};
-
+// Main function to generate PDF for a maintenance job card
 export const generateMaintenancePDF = async (jobCardId) => {
   try {
-    // Fetch job card data with engineer details
+    // Fetch the job card data
     const { data: jobCard, error: jobCardError } = await supabase
       .from("job_cards")
-      .select(
-        `
-        id, 
-        type, 
-        date_in, 
-        date_out, 
-        total_hours, 
-        remarks, 
-        customer_name, 
-        customer_sign_name, 
-        customer_signature, 
-        inspector_signature,
-        inspector_id,
-        engineers (name)
-      `
-      )
+      .select("*")
       .eq("id", jobCardId)
       .single();
 
     if (jobCardError) throw jobCardError;
     if (!jobCard) throw new Error("Job card not found");
 
-    // Extract engineer name from the joined data
-    const inspectorName = jobCard.engineers?.name || "Not specified";
+    // Fetch the engineer/inspector data
+    const { data: engineer, error: engineerError } = await supabase
+      .from("engineers")
+      .select("name")
+      .eq("id", jobCard.inspector_id)
+      .single();
 
-    // Fetch checklist questions and answers
-    const { data: checklist, error: checklistError } = await supabase
-      .from("checklist_templates")
-      .select("id, question, order")
-      .eq("type", jobCard.type)
-      .order("order", { ascending: true });
+    if (engineerError) throw engineerError;
 
-    if (checklistError) throw checklistError;
-
-    // Fetch answers for this job card
+    // Fetch all answers for this job card
     const { data: answers, error: answersError } = await supabase
       .from("answers")
-      .select("template_id, answer")
-      .eq("job_card_id", jobCardId);
+      .select(`
+        answer,
+        template_id,
+        checklist_templates(question, order, input_type)
+      `)
+      .eq("job_card_id", jobCardId)
+      .order("template_id");
 
     if (answersError) throw answersError;
 
-    // Create a mapping of template_id to answer for easier access
-    const answerMap = {};
-    answers.forEach((answer) => {
-      answerMap[answer.template_id] = answer.answer;
-    });
-
-    // Initialize PDF document
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-
-    // Add logo
+    // Format dates and times
+    const dateInFormatted = formatDateTime(jobCard.date_in);
+    const dateOutFormatted = formatDateTime(jobCard.date_out);
+    const totalHoursFormatted = formatTotalHours(jobCard.total_hours);
+    
+    // Create a new PDF document
+    const pdf = new jsPDF();
+    
+    // Add logo if available
     try {
-      const logoUrl = "/images/nccal-logo.png"; // Path to logo
-      doc.addImage(logoUrl, "PNG", 20, 10, 40, 30);
+      const logoUrl = '/nccal-logo.png'; // Replace with your actual logo path
+      addImage(pdf, logoUrl, 10, 10, 40, 20);
     } catch (logoError) {
-      console.warn("Logo not found or could not be loaded:", logoError);
-      // Continue without logo if there's an error
+      console.warn('Could not add logo to PDF:', logoError);
     }
-
+    
     // Add title
-    doc.setFontSize(22);
-    doc.setFont("helvetica", "bold");
-    doc.text(jobCard.type, pageWidth / 2, 25, { align: "center" });
-
-    // Create a styled section for job details
-    doc.setDrawColor(0);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(20, 45, pageWidth - 40, 50, 3, 3, "FD");
-
-    // Add job details - Left column
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("Number:", 25, 55);
-    doc.text("Date In:", 25, 65);
-    doc.text("Total Hours:", 25, 75);
-    doc.text("Customer:", 25, 85);
-
-    // Add job details - Right column
-    doc.text("Date Out:", pageWidth / 2, 55);
-    doc.text("Type:", pageWidth / 2, 65);
-    doc.text("Inspector:", pageWidth / 2, 75);
-    doc.text("Remark:", pageWidth / 2, 85);
-
-    // Add job values - Left column
-    doc.setFont("helvetica", "normal");
-    doc.text(jobCard.id.toString(), 70, 55);
-    doc.text(formatDate(jobCard.date_in), 70, 65);
-    doc.text(secondsToHHMMSS(jobCard.total_hours), 70, 75);
-
-    // Handle multiline text for customer
-    const customerText = jobCard.customer_name || "";
-    if (customerText.length > 25) {
-      doc.text(customerText.substring(0, 25) + "...", 70, 85);
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(jobCard.type, 105, 20, { align: 'center' });
+    
+    // Add job card header info
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'normal');
+    
+    // Left column
+    pdf.text(`Number: ${jobCardId}`, 20, 40);
+    pdf.text(`Date In: ${dateInFormatted}`, 20, 50);
+    pdf.text(`Total Hours: ${totalHoursFormatted}`, 20, 60);
+    
+    // Right column
+    pdf.text(`Customer: ${jobCard.customer_name}`, 120, 40);
+    pdf.text(`Date Out: ${dateOutFormatted}`, 120, 50);
+    pdf.text(`Type: ${jobCard.type}`, 120, 60);
+    pdf.text(`Inspector: ${engineer.name}`, 120, 70);
+    
+    // Remarks section
+    pdf.text(`Remark: ${jobCard.remarks || ''}`, 20, 80);
+    
+    // Add checklist header
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('CHECKLIST', 105, 100, { align: 'center' });
+    
+    // Add checklist table headers
+    pdf.setFontSize(12);
+    pdf.text('Question', 20, 110);
+    pdf.text('Answer', 120, 110);
+    pdf.text('Remarks', 170, 110);
+    
+    pdf.line(20, 112, 190, 112); // Horizontal line below headers
+    
+    // Add checklist items
+    let y = 120; // Starting y position for checklist items
+    
+    if (answers && answers.length > 0) {
+      // Sort answers by order
+      const sortedAnswers = [...answers].sort((a, b) => 
+        a.checklist_templates.order - b.checklist_templates.order
+      );
+      
+      for (const item of sortedAnswers) {
+        // Check if we need a new page
+        if (y > 250) {
+          pdf.addPage();
+          y = 30; // Reset y position on new page
+        }
+        
+        const question = item.checklist_templates.question;
+        const answer = item.answer || '';
+        
+        // Handle word wrapping for long questions
+        const questionLines = pdf.splitTextToSize(question, 90);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text(questionLines, 20, y);
+        
+        // Handle word wrapping for long answers
+        const answerLines = pdf.splitTextToSize(answer, 40);
+        pdf.text(answerLines, 120, y);
+        
+        // Calculate how much to move down based on which has more lines
+        const lineHeight = 7;
+        const linesCount = Math.max(questionLines.length, answerLines.length);
+        y += linesCount * lineHeight;
+      }
     } else {
-      doc.text(customerText, 70, 85);
+      pdf.text('No checklist items found', 20, y);
+      y += 10;
     }
-
-    // Add job values - Right column
-    doc.text(formatDate(jobCard.date_out), pageWidth / 2 + 35, 55);
-    doc.text(jobCard.type, pageWidth / 2 + 35, 65);
-    doc.text(inspectorName, pageWidth / 2 + 35, 75);
-
-    // Handle multiline text for remarks
-    const remarkText = jobCard.remarks || "";
-    if (remarkText.length > 25) {
-      doc.text(remarkText.substring(0, 25) + "...", pageWidth / 2 + 35, 85);
-    } else {
-      doc.text(remarkText, pageWidth / 2 + 35, 85);
+    
+    // Add signature section
+    y += 20; // Add some space before signatures
+    
+    // Check if we need a new page for signatures
+    if (y > 250) {
+      pdf.addPage();
+      y = 30;
     }
-
-    // Add CHECKLIST title
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("CHECKLIST", pageWidth / 2, 105, { align: "center" });
-
-    // Prepare checklist data for table
-    const tableData = checklist.map((item) => {
-      const answer = answerMap[item.id] || "";
-      // Filter out image data for display purposes (too long for the PDF)
-      const displayAnswer = answer.startsWith("data:image")
-        ? "[Image]"
-        : answer;
-      return [item.question, displayAnswer, ""]; // Question, Answer, Remarks (empty for now)
-    });
-
-    // Add checklist table
-    doc.autoTable({
-      startY: 115,
-      head: [["Question", "Answer", "Remarks"]],
-      body: tableData,
-      theme: "grid",
-      headStyles: {
-        fillColor: [255, 255, 255],
-        textColor: [0, 0, 0],
-        fontStyle: "bold",
-      },
-      styles: {
-        cellPadding: 5,
-        fontSize: 10,
-        lineColor: [0, 0, 0],
-        lineWidth: 0.1,
-      },
-      columnStyles: {
-        0: { cellWidth: 80 },
-        1: { cellWidth: 60 },
-        2: { cellWidth: 50 },
-      },
-    });
-
-    // Start a new page if table takes too much space
-    const tableEnd = doc.lastAutoTable.finalY || 115;
-    let signatureY = tableEnd + 20;
-
-    if (signatureY > pageHeight - 50) {
-      doc.addPage();
-      signatureY = 30;
-    }
-
-    // Add Signatures section
-    doc.setFontSize(16);
-    doc.setFont("helvetica", "bold");
-    doc.text("Signatures", pageWidth / 2, signatureY, { align: "center" });
-
-    // Add signature section box
-    doc.setDrawColor(0);
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(20, signatureY + 5, pageWidth - 40, 60, 3, 3, "S");
-
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('Signatures', 105, y, { align: 'center' });
+    y += 10;
+    
     // Add inspector signature
-    if (
-      jobCard.inspector_signature &&
-      jobCard.inspector_signature.startsWith("data:image")
-    ) {
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Inspector: ${engineer.name}`, 40, y + 5);
+    
+    // Add inspector signature image
+    if (jobCard.inspector_signature) {
       try {
-        doc.addImage(
-          jobCard.inspector_signature,
-          "PNG",
-          30,
-          signatureY + 15,
-          70,
-          30
-        );
-        doc.setFontSize(10);
-        doc.text(`Inspector: ${inspectorName}`, 30, signatureY + 50);
+        addImageFromBase64(pdf, jobCard.inspector_signature, 40, y + 10, 50, 25);
       } catch (sigError) {
-        console.warn("Error adding inspector signature:", sigError);
-        doc.text("Inspector signature unavailable", 30, signatureY + 30);
-        doc.text(`Inspector: ${inspectorName}`, 30, signatureY + 50);
+        console.warn('Could not add inspector signature to PDF:', sigError);
       }
-    } else {
-      doc.text("Inspector signature unavailable", 30, signatureY + 30);
-      doc.text(`Inspector: ${inspectorName}`, 30, signatureY + 50);
     }
-
+    
     // Add customer signature
-    if (
-      jobCard.customer_signature &&
-      jobCard.customer_signature.startsWith("data:image")
-    ) {
+    pdf.text(`Customer: ${jobCard.customer_sign_name || jobCard.customer_name}`, 140, y + 5);
+    
+    // Add customer signature image
+    if (jobCard.customer_signature) {
       try {
-        doc.addImage(
-          jobCard.customer_signature,
-          "PNG",
-          pageWidth - 100,
-          signatureY + 15,
-          70,
-          30
-        );
-        doc.setFontSize(10);
-        doc.text(
-          `Customer: ${
-            jobCard.customer_sign_name || jobCard.customer_name || ""
-          }`,
-          pageWidth - 100,
-          signatureY + 50
-        );
+        addImageFromBase64(pdf, jobCard.customer_signature, 140, y + 10, 50, 25);
       } catch (sigError) {
-        console.warn("Error adding customer signature:", sigError);
-        doc.text(
-          "Customer signature unavailable",
-          pageWidth - 100,
-          signatureY + 30
-        );
-        doc.text(
-          `Customer: ${
-            jobCard.customer_sign_name || jobCard.customer_name || ""
-          }`,
-          pageWidth - 100,
-          signatureY + 50
-        );
+        console.warn('Could not add customer signature to PDF:', sigError);
       }
-    } else {
-      doc.text(
-        "Customer signature unavailable",
-        pageWidth - 100,
-        signatureY + 30
-      );
-      doc.text(
-        `Customer: ${
-          jobCard.customer_sign_name || jobCard.customer_name || ""
-        }`,
-        pageWidth - 100,
-        signatureY + 50
-      );
     }
-
-    // Add footer with date generated
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text(
-      `Generated on: ${formatDate(new Date().toISOString())}`,
-      pageWidth / 2,
-      pageHeight - 10,
-      { align: "center" }
-    );
-
+    
+    // Add generation timestamp at the bottom
+    y += 40;
+    const generatedTimestamp = new Date().toLocaleString();
+    pdf.setFontSize(10);
+    pdf.text(`Generated on: ${generatedTimestamp}`, 105, y + 10, { align: 'center' });
+    
+    // Generate the filename
+    const fileName = `Maintenance_${jobCard.type.replace(/\s+/g, '_')}_${jobCardId}.pdf`;
+    
     // Save the PDF
-    const fileName = `Maintenance_${jobCard.type.replace(/\s+/g, "_")}_${
-      jobCard.id
-    }.pdf`;
-    doc.save(fileName);
-
+    pdf.save(fileName);
+    
     return fileName;
   } catch (error) {
     console.error("Error generating PDF:", error);
@@ -304,13 +185,52 @@ export const generateMaintenancePDF = async (jobCardId) => {
   }
 };
 
-// Function to open PDF in a new window for preview
-export const previewMaintenancePDF = async (jobCardId) => {
+// Helper function to format date and time
+const formatDateTime = (timestamp) => {
+  if (!timestamp) return '';
+  
+  const date = new Date(timestamp);
+  return date.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).replace(',', '');
+};
+
+// Helper function to format total hours from seconds
+const formatTotalHours = (totalSeconds) => {
+  if (totalSeconds === null || totalSeconds === undefined) return '00:00:00';
+  
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+// Helper function to add an image from URL
+const addImage = (pdf, url, x, y, width, height) => {
   try {
-    const fileName = await generateMaintenancePDF(jobCardId);
-    return fileName;
+    pdf.addImage(url, 'PNG', x, y, width, height);
   } catch (error) {
-    console.error("Error previewing PDF:", error);
-    throw error;
+    console.error('Error adding image:', error);
+  }
+};
+
+// Helper function to add an image from base64 string
+const addImageFromBase64 = (pdf, base64String, x, y, width, height) => {
+  try {
+    // Remove the data URL prefix if present
+    const imageData = base64String.includes('data:image')
+      ? base64String
+      : `data:image/png;base64,${base64String}`;
+      
+    pdf.addImage(imageData, 'PNG', x, y, width, height);
+  } catch (error) {
+    console.error('Error adding base64 image:', error);
   }
 };
