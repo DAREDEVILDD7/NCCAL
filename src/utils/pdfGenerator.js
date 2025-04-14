@@ -107,7 +107,19 @@ export const generateMaintenancePDF = async (jobCardId) => {
         }
         
         const question = item.checklist_templates.question;
-        const answer = item.answer || '';
+        let displayAnswer = item.answer || '';
+        
+        // Check if the answer is a base64 image
+        if (isBase64Image(displayAnswer)) {
+          displayAnswer = '[Image]';
+          
+          // Optionally, you could also add the actual image to the PDF
+          // try {
+          //   addImageFromBase64(pdf, item.answer, 120, y, 40, 20);
+          // } catch (imgError) {
+          //   console.warn('Could not add answer image to PDF:', imgError);
+          // }
+        }
         
         // Handle word wrapping for long questions
         const questionLines = pdf.splitTextToSize(question, 90);
@@ -115,7 +127,7 @@ export const generateMaintenancePDF = async (jobCardId) => {
         pdf.text(questionLines, 20, y);
         
         // Handle word wrapping for long answers
-        const answerLines = pdf.splitTextToSize(answer, 40);
+        const answerLines = pdf.splitTextToSize(displayAnswer, 40);
         pdf.text(answerLines, 120, y);
         
         // Calculate how much to move down based on which has more lines
@@ -183,6 +195,25 @@ export const generateMaintenancePDF = async (jobCardId) => {
     console.error("Error generating PDF:", error);
     throw error;
   }
+};
+
+// Helper function to check if a string is a base64 image
+const isBase64Image = (str) => {
+  if (!str) return false;
+  
+  // Check for common base64 image patterns
+  const isBase64Pattern = /^data:image\/[a-zA-Z]+;base64,/;
+  if (isBase64Pattern.test(str)) return true;
+  
+  // If it doesn't have the prefix but looks like base64
+  if (str.length > 100) {
+    const base64Regex = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    // Check a sample of the string (first 100 chars) to avoid performance issues with long strings
+    const sample = str.substring(0, 100);
+    if (base64Regex.test(sample)) return true;
+  }
+  
+  return false;
 };
 
 // Helper function to format date and time
