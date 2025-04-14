@@ -355,7 +355,7 @@ export default function EngineerJobs() {
         .from("job_cards")
         .insert({
           inspector_id: engineer.id,
-          customer_name: customerName || customer,
+          customer_name: customer,
           date_in: dateIn,
           date_out: dateOut,
           total_hours: convertTimeStringToSeconds(totalHours),
