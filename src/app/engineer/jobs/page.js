@@ -23,6 +23,7 @@ export default function EngineerJobs() {
   const [customerSignature, setCustomerSignature] = useState(null);
   const [isSignatureVisible, setIsSignatureVisible] = useState(false);
   const [missingFields, setMissingFields] = useState([]);
+  const [signaturesReady, setSignaturesReady] = useState(false);
 
   // New state for common fields
   const [dateIn, setDateIn] = useState("");
@@ -119,6 +120,45 @@ export default function EngineerJobs() {
         [index]: value,
       },
     }));
+  };
+
+  const captureSignatures = () => {
+    try {
+      if (
+        inspectorSignatureRef.current &&
+        !inspectorSignatureRef.current.isEmpty()
+      ) {
+        setInspectorSignature(
+          inspectorSignatureRef.current
+            .getTrimmedCanvas()
+            .toDataURL("image/png")
+        );
+      } else {
+        alert("Inspector signature is missing");
+        return false;
+      }
+
+      if (
+        customerSignatureRef.current &&
+        !customerSignatureRef.current.isEmpty()
+      ) {
+        setCustomerSignature(
+          customerSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
+        );
+      } else {
+        alert("Customer signature is missing");
+        return false;
+      }
+
+      // Set signatures as ready
+      setSignaturesReady(true);
+      alert("Signatures saved successfully!");
+      return true;
+    } catch (error) {
+      console.error("Error capturing signatures:", error);
+      alert("Error saving signatures. Please try again.");
+      return false;
+    }
   };
 
   // First, define this handler function in your component
@@ -252,6 +292,7 @@ export default function EngineerJobs() {
 
   // Function to check if all required fields are filled and signatures are done
   // Modify the validateForm function to ensure signatures are properly set
+
   const validateForm = () => {
     let missing = [];
     const currentAnswers = getCurrentAnswers();
@@ -272,30 +313,21 @@ export default function EngineerJobs() {
       }
     });
 
-    // Check and capture inspector signature immediately
+    // Check signatures but DON'T capture them here
     if (
       inspectorSignatureRef.current &&
-      inspectorSignatureRef.current.isEmpty()
+      inspectorSignatureRef.current.isEmpty() &&
+      !inspectorSignature // Check state too
     ) {
       missing.push("Inspector Signature");
-    } else if (inspectorSignatureRef.current) {
-      // Set inspector signature immediately when validating
-      setInspectorSignature(
-        inspectorSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
-      );
     }
 
-    // Check and capture customer signature immediately
     if (
       customerSignatureRef.current &&
-      customerSignatureRef.current.isEmpty()
+      customerSignatureRef.current.isEmpty() &&
+      !customerSignature // Check state too
     ) {
       missing.push("Customer Signature");
-    } else if (customerSignatureRef.current) {
-      // Set customer signature immediately when validating
-      setCustomerSignature(
-        customerSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
-      );
     }
 
     setMissingFields(missing);
@@ -303,6 +335,34 @@ export default function EngineerJobs() {
   };
 
   const handleSubmit = async () => {
+    try {
+      if (
+        inspectorSignatureRef.current &&
+        !inspectorSignatureRef.current.isEmpty()
+      ) {
+        setInspectorSignature(
+          inspectorSignatureRef.current
+            .getTrimmedCanvas()
+            .toDataURL("image/png")
+        );
+      }
+
+      if (
+        customerSignatureRef.current &&
+        !customerSignatureRef.current.isEmpty()
+      ) {
+        setCustomerSignature(
+          customerSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
+        );
+      }
+
+      // Small delay to ensure state updates
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    } catch (signatureError) {
+      console.error("Error capturing signatures:", signatureError);
+    }
+
+    // Now validate the form
     if (!validateForm()) {
       alert("Please fill all required fields.");
       return;
@@ -313,6 +373,14 @@ export default function EngineerJobs() {
 
     try {
       // Force-capture signatures again to ensure they're available
+      if (!inspectorSignature) {
+        throw new Error("Inspector signature is required");
+      }
+
+      if (!customerSignature) {
+        throw new Error("Customer signature is required");
+      }
+
       const inspectorSig = inspectorSignatureRef.current.isEmpty()
         ? null
         : inspectorSignatureRef.current
@@ -349,8 +417,8 @@ export default function EngineerJobs() {
           total_hours: convertTimeStringToSeconds(totalHours),
           remarks: remark,
           customer_sign_name: customerName,
-          customer_signature: customerSig,
-          inspector_signature: inspectorSig,
+          customer_signature: customerSignature, // Use state variable
+          inspector_signature: inspectorSignature, // Use state variable
           type: maintenanceType,
         })
         .select("id");
@@ -440,6 +508,16 @@ export default function EngineerJobs() {
         setDateOut("");
         setRemark("");
         setTotalHours("00:00:00");
+
+        // Clear signature canvases physically
+        if (inspectorSignatureRef.current) {
+          inspectorSignatureRef.current.clear();
+        }
+        if (customerSignatureRef.current) {
+          customerSignatureRef.current.clear();
+        }
+
+        setSignaturesReady(false);
       }
     } catch (error) {
       console.error("Error submitting form:", error.message);
@@ -779,6 +857,7 @@ export default function EngineerJobs() {
                         width: "100%",
                         height: "200px",
                       },
+                      willReadFrequently: true, // Add this line
                     }}
                     ref={inspectorSignatureRef}
                   />
@@ -808,6 +887,7 @@ export default function EngineerJobs() {
                         width: "100%",
                         height: "200px",
                       },
+                      willReadFrequently: true, // Add this line
                     }}
                     ref={customerSignatureRef}
                   />
@@ -848,11 +928,18 @@ export default function EngineerJobs() {
           )}
 
           {/* Submit Button */}
-          <div className="mt-6">
+          <div className="mt-4">
+            <button
+              onClick={captureSignatures}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg mr-4"
+              type="button"
+            >
+              Save Signatures
+            </button>
             <button
               onClick={handleSubmit}
               className="w-full md:w-1/3 py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
-              disabled={!maintenanceType || isSubmitting} // Disable if no maintenance type selected or form is submitting
+              disabled={!maintenanceType || isSubmitting || !signaturesReady}
             >
               {isSubmitting ? "Submitting..." : "Submit"}
             </button>
