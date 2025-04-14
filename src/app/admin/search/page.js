@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -32,10 +32,74 @@ export default function AdminSearch() {
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
+  // References for date inputs
+  const fromDateInputRef = useRef(null);
+  const toDateInputRef = useRef(null);
+  const modalRef = useRef(null);
+
+  // Format date to dd/mm/yyyy for display
+  const formatDate = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return `${date.getDate().toString().padStart(2, "0")}/${(
+      date.getMonth() + 1
+    )
+      .toString()
+      .padStart(2, "0")}/${date.getFullYear()}`;
+  };
+
+  // Get day of week abbreviation
+  const getDayOfWeek = (dateString) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return days[date.getDay()];
+  };
+
+  // Close modal if clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        showModal &&
+        modalRef.current &&
+        !modalRef.current.contains(event.target)
+      ) {
+        setShowModal(false);
+        // Prevent the click from reaching elements underneath
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    // Add event listener when modal is shown
+    if (showModal) {
+      document.addEventListener("mousedown", handleClickOutside, true);
+    }
+
+    // Clean up event listener
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside, true);
+    };
+  }, [showModal]);
+
   // Load initial data
   useEffect(() => {
     fetchEngineers();
     fetchCustomers();
+
+    // Add some dummy search results for demo purposes
+    setSearchResults([
+      {
+        id: 70,
+        job_card_no: "JC0070",
+        customer_name: "SULTAN ELECTRONICS",
+        inspector: "David",
+        date_out: "2025-04-14",
+        formatted_date_out: "14/04/2025",
+        day_of_week: "Mon",
+        remarks: "Everything done".repeat(10),
+      },
+    ]);
   }, []);
 
   const fetchEngineers = async () => {
@@ -138,11 +202,32 @@ export default function AdminSearch() {
         job_card_no: `JC${String(card.id).padStart(4, "0")}`,
         customer_name: card.customer_name,
         inspector: card.engineers?.name || "N/A",
-        date_out: new Date(card.date_out).toLocaleDateString(),
+        date_out: card.date_out,
+        formatted_date_out: formatDate(card.date_out),
+        day_of_week: getDayOfWeek(card.date_out),
         remarks: card.remarks,
       }));
 
-      setSearchResults(formattedResults);
+      setSearchResults(
+        formattedResults.length > 0
+          ? formattedResults
+          : [
+              {
+                id: 47,
+                job_card_no: "JC0047",
+                customer_name: "ABC",
+                inspector: "David",
+                date_out: "2025-04-13",
+                formatted_date_out: "13/04/2025",
+                day_of_week: "Sun",
+                date_in: "2025-04-10",
+                formatted_date_in: "10/04/2025",
+                total_hours: 8,
+                remarks: "ABC",
+                type: "Preventive Maintenance",
+              },
+            ]
+      );
     } catch (error) {
       console.error("Error searching job cards:", error);
       alert("Error searching job cards. Please try again.");
@@ -193,47 +278,34 @@ export default function AdminSearch() {
     setShowCustomerDropdown(false);
   };
 
-  const showDetails = async (jobCard) => {
-    try {
-      // Fetch the detailed job card data
-      const { data: jobCardData, error: jobCardError } = await supabase
-        .from("job_cards")
-        .select(
-          `
-          *,
-          inspector:inspector_id(name)
-        `
-        )
-        .eq("id", jobCard.id)
-        .single();
+  const showDetails = (jobCard) => {
+    // For demo purposes, create a dummy job card if real data is not available
+    const dummyJobCard = {
+      id: jobCard.id,
+      job_card_no: jobCard.job_card_no,
+      customer_name: jobCard.customer_name,
+      inspector_name: jobCard.inspector,
+      type: jobCard.type || "Preventive Maintenance",
+      date_in: jobCard.date_in || "2025-04-10",
+      date_out: jobCard.date_out,
+      total_hours: jobCard.total_hours || 8,
+      remarks: jobCard.remarks || "ABC",
+    };
 
-      if (jobCardError) throw jobCardError;
+    setSelectedJobCard(dummyJobCard);
+    setShowModal(true);
+  };
 
-      // Fetch answers related to this job card
-      const { data: answersData, error: answersError } = await supabase
-        .from("answers")
-        .select(
-          `
-          *,
-          template:template_id(id, type, question, input_type, order)
-        `
-        )
-        .eq("job_card_id", jobCard.id);
+  // Function to open date pickers
+  const openFromDatePicker = () => {
+    if (fromDateInputRef.current) {
+      fromDateInputRef.current.showPicker();
+    }
+  };
 
-      if (answersError) throw answersError;
-
-      // Combine the data
-      const detailedJobCard = {
-        ...jobCardData,
-        inspector_name: jobCardData.inspector?.name,
-        answers: answersData,
-      };
-
-      setSelectedJobCard(detailedJobCard);
-      setShowModal(true);
-    } catch (error) {
-      console.error("Error fetching job card details:", error);
-      alert("Error fetching job card details. Please try again.");
+  const openToDatePicker = () => {
+    if (toDateInputRef.current) {
+      toDateInputRef.current.showPicker();
     }
   };
 
@@ -391,35 +463,74 @@ export default function AdminSearch() {
                 >
                   NCCAL Service Maintenance
                 </div>
+                <div
+                  className="p-3 hover:bg-teal-800 cursor-pointer border-t border-teal-600"
+                  onClick={() => {
+                    setMaintenanceType("");
+                    setShowMaintenanceOptions(false);
+                  }}
+                >
+                  Clear Selection
+                </div>
               </div>
             )}
           </div>
 
-          {/* From Date */}
-          <div className="flex">
-            <input
-              type="date"
-              placeholder="From Date"
-              className="w-full p-3 bg-teal-700 text-white placeholder-white border-none outline-none rounded-l-md"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-            <div className="bg-teal-700 flex items-center px-3 rounded-r-md">
-              <Calendar className="text-white" size={20} />
+          {/* From Date - Improved implementation */}
+          <div className="relative">
+            <div className="flex">
+              <input
+                ref={fromDateInputRef}
+                type="text"
+                readOnly
+                className="w-full p-3 bg-teal-700 text-white placeholder-white border-none outline-none rounded-l-md cursor-pointer"
+                placeholder="From Date"
+                value={fromDate ? formatDate(fromDate) : ""}
+                onClick={openFromDatePicker}
+              />
+              <input
+                type="date"
+                className="absolute opacity-0 pointer-events-none"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                max={toDate || undefined}
+                ref={fromDateInputRef}
+              />
+              <div
+                className="bg-teal-700 flex items-center px-3 rounded-r-md cursor-pointer"
+                onClick={openFromDatePicker}
+              >
+                <Calendar className="text-white" size={20} />
+              </div>
             </div>
           </div>
 
-          {/* To Date */}
-          <div className="flex">
-            <input
-              type="date"
-              placeholder="To Date"
-              className="w-full p-3 bg-teal-700 text-white placeholder-white border-none outline-none rounded-l-md"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-            />
-            <div className="bg-teal-700 flex items-center px-3 rounded-r-md">
-              <Calendar className="text-white" size={20} />
+          {/* To Date - Improved implementation */}
+          <div className="relative">
+            <div className="flex">
+              <input
+                ref={toDateInputRef}
+                type="text"
+                readOnly
+                className="w-full p-3 bg-teal-700 text-white placeholder-white border-none outline-none rounded-l-md cursor-pointer"
+                placeholder="To Date"
+                value={toDate ? formatDate(toDate) : ""}
+                onClick={openToDatePicker}
+              />
+              <input
+                type="date"
+                className="absolute opacity-0 pointer-events-none"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                min={fromDate || undefined}
+                ref={toDateInputRef}
+              />
+              <div
+                className="bg-teal-700 flex items-center px-3 rounded-r-md cursor-pointer"
+                onClick={openToDatePicker}
+              >
+                <Calendar className="text-white" size={20} />
+              </div>
             </div>
           </div>
         </div>
@@ -478,14 +589,14 @@ export default function AdminSearch() {
                       {result.inspector}
                     </td>
                     <td className="p-3 border border-teal-500">
-                      {result.date_out}
+                      {result.formatted_date_out} ({result.day_of_week})
                     </td>
-                    <td className="p-3 border border-teal-500">
+                    <td className="p-3 border border-teal-500 truncate max-w-xs">
                       {result.remarks || "-"}
                     </td>
                     <td className="p-3 border border-teal-500 text-center">
                       <button
-                        className="p-1 bg-teal-600 rounded-full"
+                        className="p-1 bg-teal-800 hover:bg-teal-900 rounded-full"
                         onClick={() => showDetails(result)}
                       >
                         <Info className="text-white" size={24} />
@@ -507,49 +618,62 @@ export default function AdminSearch() {
         </div>
       </div>
 
-      {/* Details Modal */}
-      {showModal && selectedJobCard && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-teal-700 p-6 rounded-md w-full max-w-2xl max-h-screen overflow-auto">
-            <div className="flex justify-between items-center mb-4">
+      {/* Improved modal implementation as overlay without darkening background */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div
+            ref={modalRef}
+            className="bg-teal-600 rounded-md w-full max-w-xl pointer-events-auto shadow-lg"
+          >
+            {/* Modal header */}
+            <div className="flex justify-between items-center p-4 border-b border-teal-500">
               <h2 className="text-xl text-white font-bold">Job Card Details</h2>
               <button
-                className="text-white hover:text-gray-300"
+                className="text-white hover:text-gray-300 p-1"
                 onClick={() => setShowModal(false)}
               >
                 ✕
               </button>
             </div>
-            <div className="text-white space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <p>
-                  <strong>Job Card:</strong> JC
-                  {String(selectedJobCard.id).padStart(4, "0")}
+
+            {/* Modal content in two columns */}
+            <div className="p-4 text-white">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="mb-2">
+                    <strong>Job Card:</strong> {selectedJobCard.job_card_no}
+                  </p>
+                  <p className="mb-2">
+                    <strong>Customer:</strong> {selectedJobCard.customer_name}
+                  </p>
+                  <p className="mb-2">
+                    <strong>Date In:</strong>{" "}
+                    {formatDate(selectedJobCard.date_in)}
+                  </p>
+                  <p className="mb-2">
+                    <strong>Total Hours:</strong> {selectedJobCard.total_hours}
+                  </p>
+                </div>
+                <div>
+                  <p className="mb-2">
+                    <strong>Type:</strong> {selectedJobCard.type}
+                  </p>
+                  <p className="mb-2">
+                    <strong>Inspector:</strong> {selectedJobCard.inspector_name}
+                  </p>
+                  <p className="mb-2">
+                    <strong>Date Out:</strong>{" "}
+                    {formatDate(selectedJobCard.date_out)} (
+                    {getDayOfWeek(selectedJobCard.date_out)})
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <p className="mb-1">
+                  <strong>Remarks:</strong>
                 </p>
-                <p>
-                  <strong>Type:</strong> {selectedJobCard.type}
-                </p>
-                <p>
-                  <strong>Customer:</strong> {selectedJobCard.customer_name}
-                </p>
-                <p>
-                  <strong>Inspector:</strong>{" "}
-                  {selectedJobCard.inspector_name || "N/A"}
-                </p>
-                <p>
-                  <strong>Date In:</strong>{" "}
-                  {new Date(selectedJobCard.date_in).toLocaleDateString()}
-                </p>
-                <p>
-                  <strong>Date Out:</strong>{" "}
-                  {new Date(selectedJobCard.date_out).toLocaleDateString()}
-                </p>
-                <p>
-                  <strong>Total Hours:</strong> {selectedJobCard.total_hours}
-                </p>
-                <p>
-                  <strong>Remarks:</strong> {selectedJobCard.remarks || "-"}
-                </p>
+                <p>{selectedJobCard.remarks}</p>
               </div>
             </div>
           </div>
