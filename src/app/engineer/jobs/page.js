@@ -16,7 +16,7 @@ export default function EngineerJobs() {
   const [engineer, setEngineer] = useState(null);
   const [maintenanceType, setMaintenanceType] = useState("");
   const [questions, setQuestions] = useState([]);
-  const [allAnswers, setAllAnswers] = useState({}); // Object to store answers for each maintenance type
+  const [allAnswers, setAllAnswers] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [customerName, setCustomerName] = useState("");
   const [inspectorSignature, setInspectorSignature] = useState(null);
@@ -122,15 +122,20 @@ export default function EngineerJobs() {
     }));
   };
 
-  // Update the captureSignatures function with this more robust approach
+  // Safer approach to capture signatures
   const captureSignatures = () => {
     try {
       // For inspector signature
       if (inspectorSignatureRef.current) {
-        const inspectorCanvas = inspectorSignatureRef.current._canvas; // Access the canvas element directly
-        if (inspectorCanvas && !inspectorSignatureRef.current.isEmpty()) {
-          // Use toDataURL directly on the canvas element
-          setInspectorSignature(inspectorCanvas.toDataURL("image/png"));
+        if (!inspectorSignatureRef.current.isEmpty()) {
+          // Use direct canvas access
+          const canvasInspector = inspectorSignatureRef.current._canvas;
+          if (canvasInspector) {
+            setInspectorSignature(canvasInspector.toDataURL("image/png"));
+          } else {
+            console.error("Inspector canvas not available");
+            return false;
+          }
         } else {
           alert("Inspector signature is missing");
           return false;
@@ -139,10 +144,15 @@ export default function EngineerJobs() {
 
       // For customer signature
       if (customerSignatureRef.current) {
-        const customerCanvas = customerSignatureRef.current._canvas; // Access the canvas element directly
-        if (customerCanvas && !customerSignatureRef.current.isEmpty()) {
-          // Use toDataURL directly on the canvas element
-          setCustomerSignature(customerCanvas.toDataURL("image/png"));
+        if (!customerSignatureRef.current.isEmpty()) {
+          // Use direct canvas access
+          const canvasCustomer = customerSignatureRef.current._canvas;
+          if (canvasCustomer) {
+            setCustomerSignature(canvasCustomer.toDataURL("image/png"));
+          } else {
+            console.error("Customer canvas not available");
+            return false;
+          }
         } else {
           alert("Customer signature is missing");
           return false;
@@ -160,7 +170,6 @@ export default function EngineerJobs() {
     }
   };
 
-  // First, define this handler function in your component
   const handleMaintenanceTypeChange = (e) => {
     const newType = e.target.value;
     setMaintenanceType(newType);
@@ -175,24 +184,11 @@ export default function EngineerJobs() {
       customerSignatureRef.current.clear();
     }
 
-    // IMPORTANT: Also reset the signature states
+    // Reset the signature states
     setInspectorSignature(null);
     setCustomerSignature(null);
+    setSignaturesReady(false);
   };
-
-  // Then use the handler in your select element
-  <select
-    id="maintenanceType"
-    value={maintenanceType}
-    onChange={handleMaintenanceTypeChange}
-    className="w-full md:w-1/2 px-4 py-2 border rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-  >
-    <option value="" disabled>
-      Select maintenance type
-    </option>
-    <option value="Preventive Maintenance">Preventive Maintenance</option>
-    <option value="NCCAL Service Maintenance">NCCAL Service Maintenance</option>
-  </select>;
 
   // Function to get current answers for the selected maintenance type
   const getCurrentAnswers = () => {
@@ -281,17 +277,20 @@ export default function EngineerJobs() {
 
   const clearSignature = (signatureType) => {
     if (signatureType === "inspector") {
-      inspectorSignatureRef.current.clear();
+      if (inspectorSignatureRef.current) {
+        inspectorSignatureRef.current.clear();
+      }
       setInspectorSignature(null);
     } else if (signatureType === "customer") {
-      customerSignatureRef.current.clear();
+      if (customerSignatureRef.current) {
+        customerSignatureRef.current.clear();
+      }
       setCustomerSignature(null);
     }
+    setSignaturesReady(false);
   };
 
-  // Function to check if all required fields are filled and signatures are done
-  // Modify the validateForm function to ensure signatures are properly set
-
+  // Function to check if all required fields are filled
   const validateForm = () => {
     let missing = [];
     const currentAnswers = getCurrentAnswers();
@@ -312,20 +311,12 @@ export default function EngineerJobs() {
       }
     });
 
-    // Check signatures but DON'T capture them here
-    if (
-      inspectorSignatureRef.current &&
-      inspectorSignatureRef.current.isEmpty() &&
-      !inspectorSignature // Check state too
-    ) {
+    // Check signatures
+    if (!inspectorSignature) {
       missing.push("Inspector Signature");
     }
 
-    if (
-      customerSignatureRef.current &&
-      customerSignatureRef.current.isEmpty() &&
-      !customerSignature // Check state too
-    ) {
+    if (!customerSignature) {
       missing.push("Customer Signature");
     }
 
@@ -334,31 +325,10 @@ export default function EngineerJobs() {
   };
 
   const handleSubmit = async () => {
-    try {
-      if (
-        inspectorSignatureRef.current &&
-        !inspectorSignatureRef.current.isEmpty()
-      ) {
-        setInspectorSignature(
-          inspectorSignatureRef.current
-            .getTrimmedCanvas()
-            .toDataURL("image/png")
-        );
-      }
-
-      if (
-        customerSignatureRef.current &&
-        !customerSignatureRef.current.isEmpty()
-      ) {
-        setCustomerSignature(
-          customerSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
-        );
-      }
-
-      // Small delay to ensure state updates
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    } catch (signatureError) {
-      console.error("Error capturing signatures:", signatureError);
+    // If signatures aren't ready, ask to save them first
+    if (!signaturesReady) {
+      alert("Please save signatures first before submitting.");
+      return;
     }
 
     // Now validate the form
@@ -371,37 +341,12 @@ export default function EngineerJobs() {
     const currentAnswers = getCurrentAnswers();
 
     try {
-      // Force-capture signatures again to ensure they're available
+      // Check for null signatures before submission
       if (!inspectorSignature) {
         throw new Error("Inspector signature is required");
       }
 
       if (!customerSignature) {
-        throw new Error("Customer signature is required");
-      }
-
-      const inspectorSig = inspectorSignatureRef.current.isEmpty()
-        ? null
-        : inspectorSignatureRef.current
-            .getTrimmedCanvas()
-            .toDataURL("image/png");
-
-      const customerSig = customerSignatureRef.current.isEmpty()
-        ? null
-        : customerSignatureRef.current
-            .getTrimmedCanvas()
-            .toDataURL("image/png");
-
-      // Update state with latest signatures
-      setInspectorSignature(inspectorSig);
-      setCustomerSignature(customerSig);
-
-      // Check for null signatures before submission
-      if (!inspectorSig) {
-        throw new Error("Inspector signature is required");
-      }
-
-      if (!customerSig) {
         throw new Error("Customer signature is required");
       }
 
@@ -485,8 +430,6 @@ export default function EngineerJobs() {
           const message = `Maintenance job card submitted successfully! PDF generated: ${pdfFileName}`;
 
           // You can implement a download function here if needed
-          // For example, you could generate a download link for the PDF
-
           alert(message);
         } catch (pdfError) {
           console.error("Error generating PDF:", pdfError);
@@ -526,7 +469,7 @@ export default function EngineerJobs() {
     }
   };
 
-  // Add this helper function if you haven't already
+  // Helper function to convert time string to seconds
   const convertTimeStringToSeconds = (timeString) => {
     const [hours, minutes, seconds] = timeString.split(":").map(Number);
     return hours * 3600 + minutes * 60 + seconds;
@@ -550,7 +493,7 @@ export default function EngineerJobs() {
             <select
               id="maintenanceType"
               value={maintenanceType}
-              onChange={(e) => setMaintenanceType(e.target.value)}
+              onChange={handleMaintenanceTypeChange}
               className="w-full md:w-1/2 px-4 py-2 border rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="" disabled>
@@ -856,7 +799,6 @@ export default function EngineerJobs() {
                         width: "100%",
                         height: "200px",
                       },
-                      willReadFrequently: true, // Add this line
                     }}
                     ref={inspectorSignatureRef}
                   />
@@ -886,7 +828,6 @@ export default function EngineerJobs() {
                         width: "100%",
                         height: "200px",
                       },
-                      willReadFrequently: true, // Add this line
                     }}
                     ref={customerSignatureRef}
                   />
