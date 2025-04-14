@@ -56,7 +56,7 @@ export default function EngineerLogin() {
     >
       <div className="w-full max-w-md bg-white/5 backdrop-blur-md rounded-3xl shadow-2xl p-8 border border-white/10">
         <h1 className="text-3xl font-extrabold text-center text-white mb-8">
-          Engineer Login
+          Admin Login
         </h1>
 
         <div className="mb-4">
