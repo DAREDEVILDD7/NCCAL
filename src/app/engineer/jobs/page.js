@@ -122,32 +122,31 @@ export default function EngineerJobs() {
     }));
   };
 
+  // Update the captureSignatures function with this more robust approach
   const captureSignatures = () => {
     try {
-      if (
-        inspectorSignatureRef.current &&
-        !inspectorSignatureRef.current.isEmpty()
-      ) {
-        setInspectorSignature(
-          inspectorSignatureRef.current
-            .getTrimmedCanvas()
-            .toDataURL("image/png")
-        );
-      } else {
-        alert("Inspector signature is missing");
-        return false;
+      // For inspector signature
+      if (inspectorSignatureRef.current) {
+        const inspectorCanvas = inspectorSignatureRef.current._canvas; // Access the canvas element directly
+        if (inspectorCanvas && !inspectorSignatureRef.current.isEmpty()) {
+          // Use toDataURL directly on the canvas element
+          setInspectorSignature(inspectorCanvas.toDataURL("image/png"));
+        } else {
+          alert("Inspector signature is missing");
+          return false;
+        }
       }
 
-      if (
-        customerSignatureRef.current &&
-        !customerSignatureRef.current.isEmpty()
-      ) {
-        setCustomerSignature(
-          customerSignatureRef.current.getTrimmedCanvas().toDataURL("image/png")
-        );
-      } else {
-        alert("Customer signature is missing");
-        return false;
+      // For customer signature
+      if (customerSignatureRef.current) {
+        const customerCanvas = customerSignatureRef.current._canvas; // Access the canvas element directly
+        if (customerCanvas && !customerSignatureRef.current.isEmpty()) {
+          // Use toDataURL directly on the canvas element
+          setCustomerSignature(customerCanvas.toDataURL("image/png"));
+        } else {
+          alert("Customer signature is missing");
+          return false;
+        }
       }
 
       // Set signatures as ready
@@ -938,7 +937,7 @@ export default function EngineerJobs() {
             </button>
             <button
               onClick={handleSubmit}
-              className="w-full md:w-1/3 py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700"
+              className="w-full md:w-1/3 py-2 px-4 bg-blue-100 text-white font-semibold rounded-lg hover:bg-blue-700"
               disabled={!maintenanceType || isSubmitting || !signaturesReady}
             >
               {isSubmitting ? "Submitting..." : "Submit"}
