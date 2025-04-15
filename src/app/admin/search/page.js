@@ -82,24 +82,12 @@ export default function AdminSearch() {
     };
   }, [showModal]);
 
-  // Load initial data
   useEffect(() => {
     fetchEngineers();
     fetchCustomers();
 
-    // Add some dummy search results for demo purposes
-    setSearchResults([
-      {
-        id: 70,
-        job_card_no: "JC0070",
-        customer_name: "SULTAN ELECTRONICS",
-        inspector: "David",
-        date_out: "2025-04-14",
-        formatted_date_out: "14/04/2025",
-        day_of_week: "Mon",
-        remarks: "Everything done".repeat(10),
-      },
-    ]);
+    // Initialize with empty results (removing the dummy data)
+    setSearchResults([]);
   }, []);
 
   const fetchEngineers = async () => {
@@ -117,6 +105,57 @@ export default function AdminSearch() {
       }
     } catch (error) {
       console.error("Error fetching engineers:", error);
+    }
+  };
+
+  // Add a new function to fetch the last job card
+  const fetchLastJobCard = async () => {
+    setLoading(true);
+    try {
+      // Query the database to get the most recent job card
+      const { data, error } = await supabase
+        .from("job_cards")
+        .select(
+          `
+        id,
+        customer_name,
+        date_in,
+        date_out,
+        total_hours,
+        remarks,
+        type,
+        engineers:inspector_id(id, name)
+      `
+        )
+        .order("id", { ascending: false })
+        .limit(1);
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        // Format the results
+        const formattedResults = data.map((card) => ({
+          id: card.id,
+          job_card_no: `JC${String(card.id).padStart(4, "0")}`,
+          customer_name: card.customer_name,
+          inspector: card.engineers?.name || "N/A",
+          date_out: card.date_out,
+          formatted_date_out: formatDate(card.date_out),
+          day_of_week: getDayOfWeek(card.date_out),
+          remarks: card.remarks,
+        }));
+
+        setSearchResults(formattedResults);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (error) {
+      console.error("Error fetching last job card:", error);
+      alert("Error fetching last job card. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -208,26 +247,7 @@ export default function AdminSearch() {
         remarks: card.remarks,
       }));
 
-      setSearchResults(
-        formattedResults.length > 0
-          ? formattedResults
-          : [
-              {
-                id: 47,
-                job_card_no: "JC0047",
-                customer_name: "ABC",
-                inspector: "David",
-                date_out: "2025-04-13",
-                formatted_date_out: "13/04/2025",
-                day_of_week: "Sun",
-                date_in: "2025-04-10",
-                formatted_date_in: "10/04/2025",
-                total_hours: 8,
-                remarks: "ABC",
-                type: "Preventive Maintenance",
-              },
-            ]
-      );
+      setSearchResults(formattedResults);
     } catch (error) {
       console.error("Error searching job cards:", error);
       alert("Error searching job cards. Please try again.");
@@ -535,10 +555,18 @@ export default function AdminSearch() {
           </div>
         </div>
 
-        {/* Search Button */}
-        <div className="flex justify-end mb-6">
+        {/* Search and Last Job Card Buttons */}
+        <div className="flex justify-end mb-6 gap-4">
           <button
-            className="px-8 py-3 bg-teal-700 text-white rounded-md hover:bg-teal-800 disabled:opacity-70"
+            className="px-8 py-3 bg-teal-700 text-white rounded-md hover:bg-teal-800 disabled:opacity-70 order-2 sm:order-1"
+            onClick={fetchLastJobCard}
+            disabled={loading}
+          >
+            <span className="hidden sm:inline">Last Job Card</span>
+            <span className="sm:hidden">Last</span>
+          </button>
+          <button
+            className="px-8 py-3 bg-teal-700 text-white rounded-md hover:bg-teal-800 disabled:opacity-70 order-1 sm:order-2"
             onClick={handleSearch}
             disabled={loading}
           >
