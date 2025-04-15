@@ -12,6 +12,7 @@ import {
   Info,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import AdminSidebar from "../../../app/components/AdminSidebar";
 
 export default function AdminSearch() {
   const [maintenanceType, setMaintenanceType] = useState("");
@@ -405,36 +406,7 @@ export default function AdminSearch() {
 
   return (
     <div className="flex h-screen bg-teal-500">
-      {/* Sidebar */}
-      <div className="w-16 bg-teal-600 flex flex-col items-center py-6 shadow-md">
-        <Link href="/admin/search" className="mb-8 p-2 bg-teal-700 rounded-md">
-          <Search className="text-white" size={24} />
-        </Link>
-        <Link
-          href="/admin/questions"
-          className="mb-8 p-2 hover:bg-teal-700 rounded-md"
-        >
-          <List className="text-white" size={24} />
-        </Link>
-        <Link
-          href="/admin/document"
-          className="mb-8 p-2 hover:bg-teal-700 rounded-md"
-        >
-          <FileText className="text-white" size={24} />
-        </Link>
-        <Link
-          href="/admin/credentials"
-          className="mb-8 p-2 hover:bg-teal-700 rounded-md"
-        >
-          <User className="text-white" size={24} />
-        </Link>
-        <Link
-          href="/admin"
-          className="mt-auto p-2 hover:bg-teal-700 rounded-md"
-        >
-          <LogOut className="text-white" size={24} />
-        </Link>
-      </div>
+      <AdminSidebar />
 
       {/* Main content */}
       <div className="flex-1 p-6 overflow-auto">
