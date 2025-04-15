@@ -31,6 +31,9 @@ export default function AdminSearch() {
   const [customers, setCustomers] = useState([]);
   const [filteredCustomers, setFilteredCustomers] = useState([]);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [checklistItems, setChecklistItems] = useState([]);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   // References for date inputs
   const fromDateInputRef = useRef(null);
@@ -54,6 +57,20 @@ export default function AdminSearch() {
     const date = new Date(dateString);
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     return days[date.getDay()];
+  };
+
+  const isBase64Image = (str) => {
+    if (!str) return false;
+    try {
+      // Check if it starts with a data URI prefix for images
+      if (str.startsWith("data:image/")) return true;
+
+      // If it doesn't have a prefix but looks like base64 data
+      if (typeof str !== "string" || str.length < 100) return false;
+      return /^[A-Za-z0-9+/=]+$/.test(str) && str.length % 4 === 0;
+    } catch (err) {
+      return false;
+    }
   };
 
   // Close modal if clicked outside
@@ -106,6 +123,11 @@ export default function AdminSearch() {
     } catch (error) {
       console.error("Error fetching engineers:", error);
     }
+  };
+
+  const handleImageClick = (imageData) => {
+    setSelectedImage(imageData);
+    setShowImageModal(true);
   };
 
   // Add a new function to fetch the last job card
@@ -298,22 +320,74 @@ export default function AdminSearch() {
     setShowCustomerDropdown(false);
   };
 
-  const showDetails = (jobCard) => {
-    // For demo purposes, create a dummy job card if real data is not available
-    const dummyJobCard = {
-      id: jobCard.id,
-      job_card_no: jobCard.job_card_no,
-      customer_name: jobCard.customer_name,
-      inspector_name: jobCard.inspector,
-      type: jobCard.type || "Preventive Maintenance",
-      date_in: jobCard.date_in || "2025-04-10",
-      date_out: jobCard.date_out,
-      total_hours: jobCard.total_hours || 8,
-      remarks: jobCard.remarks || "ABC",
-    };
+  const showDetails = async (jobCard) => {
+    setLoading(true);
+    try {
+      // Fetch job card details
+      const { data: jobCardData, error: jobCardError } = await supabase
+        .from("job_cards")
+        .select(
+          `
+          id,
+          customer_name,
+          date_in,
+          date_out,
+          total_hours,
+          remarks,
+          type,
+          engineers:inspector_id(id, name)
+        `
+        )
+        .eq("id", jobCard.id)
+        .single();
 
-    setSelectedJobCard(dummyJobCard);
-    setShowModal(true);
+      if (jobCardError) throw jobCardError;
+
+      // Fetch checklist items with answers
+      const { data: checklistData, error: checklistError } = await supabase
+        .from("checklist_templates")
+        .select(
+          `
+          id,
+          question,
+          order,
+          answers!inner(answer, job_card_id)
+        `
+        )
+        .eq("answers.job_card_id", jobCard.id)
+        .order("order", { ascending: true });
+
+      if (checklistError) throw checklistError;
+
+      // Format checklist data
+      const formattedChecklist = checklistData.map((item) => ({
+        question: item.question,
+        answer: item.answers[0]?.answer || "N/A",
+      }));
+
+      setChecklistItems(formattedChecklist);
+
+      // Set job card details
+      const formattedJobCard = {
+        id: jobCardData.id,
+        job_card_no: `JC${String(jobCardData.id).padStart(4, "0")}`,
+        customer_name: jobCardData.customer_name,
+        inspector_name: jobCardData.engineers?.name || "N/A",
+        type: jobCardData.type || "Preventive Maintenance",
+        date_in: jobCardData.date_in,
+        date_out: jobCardData.date_out,
+        total_hours: jobCardData.total_hours || 8,
+        remarks: jobCardData.remarks || "-",
+      };
+
+      setSelectedJobCard(formattedJobCard);
+      setShowModal(true);
+    } catch (error) {
+      console.error("Error fetching job card details:", error);
+      alert("Error fetching job card details. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Function to open date pickers
@@ -651,7 +725,7 @@ export default function AdminSearch() {
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <div
             ref={modalRef}
-            className="bg-teal-600 rounded-md w-full max-w-xl pointer-events-auto shadow-lg"
+            className="bg-teal-600 rounded-md w-full max-w-xl max-h-[90vh] flex flex-col pointer-events-auto shadow-lg"
           >
             {/* Modal header */}
             <div className="flex justify-between items-center p-4 border-b border-teal-500">
@@ -665,7 +739,9 @@ export default function AdminSearch() {
             </div>
 
             {/* Modal content in two columns */}
-            <div className="p-4 text-white">
+            {/* Modal content */}
+            <div className="p-4 text-white overflow-y-auto flex-1">
+              {/* Current job card info */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="mb-2">
@@ -703,7 +779,71 @@ export default function AdminSearch() {
                 </p>
                 <p>{selectedJobCard.remarks}</p>
               </div>
+
+              {/* Divider line */}
+              <hr className="my-4 border-teal-500" />
+
+              {/* Checklists section */}
+              <div className="mt-4">
+                <p className="mb-2">
+                  <strong>Checklists:</strong>
+                </p>
+                {checklistItems.length > 0 ? (
+                  <div className="space-y-3">
+                    {checklistItems.map((item, index) => (
+                      <div key={index} className="flex flex-wrap items-start">
+                        <div className="w-full sm:w-1/2 font-medium pr-2">
+                          {`${index + 1}: ${item.question}`}
+                        </div>
+                        <div className="w-full sm:w-1/2 pl-0 sm:pl-2 mt-1 sm:mt-0">
+                          {isBase64Image(item.answer) ? (
+                            <div>
+                              <img
+                                src={
+                                  item.answer.startsWith("data:image/")
+                                    ? item.answer
+                                    : `data:image/jpeg;base64,${item.answer}`
+                                }
+                                alt="Answer"
+                                className="h-16 cursor-pointer hover:opacity-80"
+                                onClick={() => handleImageClick(item.answer)}
+                              />
+                            </div>
+                          ) : (
+                            <span>{item.answer}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p>No checklist items found.</p>
+                )}
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full size image modal */}
+      {showImageModal && selectedImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+          <div className="relative max-w-4xl max-h-full p-2">
+            <button
+              className="absolute right-4 top-4 text-white bg-teal-700 rounded-full p-2 hover:bg-teal-800"
+              onClick={() => setShowImageModal(false)}
+            >
+              ✕
+            </button>
+            <img
+              src={
+                selectedImage.startsWith("data:image/")
+                  ? selectedImage
+                  : `data:image/jpeg;base64,${selectedImage}`
+              }
+              alt="Full size"
+              className="max-h-[90vh] max-w-full"
+            />
           </div>
         </div>
       )}
