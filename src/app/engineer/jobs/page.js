@@ -24,6 +24,7 @@ export default function EngineerJobs() {
   const [isSignatureVisible, setIsSignatureVisible] = useState(false);
   const [missingFields, setMissingFields] = useState([]);
   const [signaturesReady, setSignaturesReady] = useState(false);
+  const [pdfError, setPdfError] = useState(null);
 
   // New state for common fields
   const [dateIn, setDateIn] = useState("");
@@ -33,6 +34,7 @@ export default function EngineerJobs() {
   const [totalHours, setTotalHours] = useState("00:00:00");
   const [remark, setRemark] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   const router = useRouter();
 
@@ -424,17 +426,51 @@ export default function EngineerJobs() {
 
         // Generate PDF using our new generator
         try {
-          const pdfFileName = await generateMaintenancePDF(jobCardId);
+          console.log("Starting PDF generation...");
+          const result = await generateMaintenancePDF(jobCardId);
 
-          // Create a success message with download option
-          const message = `Maintenance job card submitted successfully! PDF generated: ${pdfFileName}`;
+          if (result.error) {
+            // Partial success - PDF generated but not uploaded
+            setSuccessMessage({
+              message: `Job card saved! PDF generated but could not be uploaded: ${result.error}`,
+              pdfName: result.fileName,
+              // No pdfUrl in this case since upload failed
+            });
 
-          // You can implement a download function here if needed
-          alert(message);
-        } catch (pdfError) {
-          console.error("Error generating PDF:", pdfError);
+            console.warn("PDF generated but not uploaded:", result.error);
+          } else {
+            // Full success
+            setSuccessMessage({
+              message: "Maintenance job card submitted successfully!",
+              pdfUrl: result.fileUrl,
+              pdfName: result.fileName,
+            });
+            console.log("PDF generated and stored successfully");
+          }
+
+          // For automatic download on mobile
+          if (
+            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+              navigator.userAgent
+            )
+          ) {
+            // Create a link and trigger download
+            const link = document.createElement("a");
+            link.href = fileUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        } catch (error) {
+          console.error("PDF generation failed:", error);
+          setPdfError(
+            `Error generating PDF: ${error.message || "Unknown error"}`
+          );
           alert(
-            "Job card saved but PDF generation failed. Please try downloading it later."
+            `Job card saved but PDF generation failed: ${
+              error.message || "Unknown error"
+            }`
           );
         }
 
@@ -887,6 +923,31 @@ export default function EngineerJobs() {
         </div>
       ) : (
         <div>Loading...</div>
+      )}
+
+      {/* Success message with download button */}
+      {successMessage && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-xl font-bold text-green-600 mb-4">Success!</h3>
+            <p className="mb-4">{successMessage.message}</p>
+            <div className="flex flex-col space-y-3">
+              <a
+                href={successMessage.pdfUrl}
+                download={successMessage.pdfName}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg text-center font-medium hover:bg-blue-700"
+              >
+                Download PDF
+              </a>
+              <button
+                onClick={() => setSuccessMessage(null)}
+                className="w-full bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-center font-medium hover:bg-gray-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
