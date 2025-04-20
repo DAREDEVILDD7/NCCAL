@@ -452,12 +452,13 @@ export default function EngineerJobs() {
           if (
             /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
               navigator.userAgent
-            )
+            ) &&
+            result?.fileUrl &&
+            result?.fileName
           ) {
-            // Create a link and trigger download
             const link = document.createElement("a");
-            link.href = fileUrl;
-            link.download = fileName;
+            link.href = result.fileUrl; // ✅ use from result
+            link.download = result.fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
