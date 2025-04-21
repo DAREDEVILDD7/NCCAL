@@ -35,6 +35,7 @@ export default function AdminSearch() {
   const [checklistItems, setChecklistItems] = useState([]);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [pdfFile, setPdfFile] = useState(null);
 
   // References for date inputs
   const fromDateInputRef = useRef(null);
@@ -50,6 +51,20 @@ export default function AdminSearch() {
     )
       .toString()
       .padStart(2, "0")}/${date.getFullYear()}`;
+  };
+
+  const formatTimeFromSeconds = (totalSeconds) => {
+    if (!totalSeconds) return "00:00:00";
+
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return [
+      hours.toString().padStart(2, "0"),
+      minutes.toString().padStart(2, "0"),
+      seconds.toString().padStart(2, "0"),
+    ].join(":");
   };
 
   // Get day of week abbreviation
@@ -367,6 +382,16 @@ export default function AdminSearch() {
       }));
 
       setChecklistItems(formattedChecklist);
+
+      const { data: pdfData, error: pdfError } = await supabase
+        .from("pdf_files")
+        .select("file_name, file_url")
+        .eq("job_card_id", jobCard.id)
+        .maybeSingle(); // Use maybeSingle to handle cases where no PDF exists
+
+      if (pdfError) throw pdfError;
+
+      setPdfFile(pdfData); // Will be null if no PDF exists
 
       // Set job card details
       const formattedJobCard = {
@@ -727,7 +752,8 @@ export default function AdminSearch() {
                     {formatDate(selectedJobCard.date_in)}
                   </p>
                   <p className="mb-2">
-                    <strong>Total Hours:</strong> {selectedJobCard.total_hours}
+                    <strong>Total Hours:</strong>{" "}
+                    {formatTimeFromSeconds(selectedJobCard.total_hours)}
                   </p>
                 </div>
                 <div>
@@ -790,6 +816,31 @@ export default function AdminSearch() {
                   </div>
                 ) : (
                   <p>No checklist items found.</p>
+                )}
+              </div>
+
+              <hr className="my-4 border-teal-500" />
+
+              {/* Document Download Section */}
+              <div className="mt-4">
+                <p className="mb-2">
+                  <strong>Documentation:</strong>
+                </p>
+
+                {pdfFile ? (
+                  <a
+                    href={pdfFile.file_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-md transition-colors duration-200 flex items-center"
+                  >
+                    <FileText className="mr-2" size={18} />
+                    Download Document
+                  </a>
+                ) : (
+                  <p className="text-teal-200 italic">
+                    No document available for this job card.
+                  </p>
                 )}
               </div>
             </div>
